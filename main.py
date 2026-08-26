@@ -8,17 +8,18 @@ from typing import Optional, List, Dict, Any
 
 import discord
 from discord import app_commands
-from discord.ext import commands, tasks
+from discord.ext import commands
 from dotenv import load_dotenv
 
-# Charge les variables d'environnement depuis le fichier .env
+# Charge les variables d'environnement (.env)
 load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-OWNER_IDS = [int(x.strip()) for x in os.getenv("OWNER_IDS", "").split(",") if x.strip()]
-OFFICIAL_GUILD_ID = int(os.getenv("OFFICIAL_GUILD_ID", "0"))
-GLOBAL_ANNOUNCE_CHANNEL_ID = int(os.getenv("GLOBAL_ANNOUNCE_CHANNEL_ID", "0"))
+OWNER_IDS = [int(x.strip()) for x in os.getenv("OWNER_IDS", "").split(",") if x.strip() and x.strip().isdigit()]
+
+# Code secret pour débloquer le pack complet
+ACTIVATION_CODE = "0001"
 
 # Configuration du Logging
 logging.basicConfig(
@@ -28,7 +29,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("Zyren")
 
-# Support du module IA Gemini (google-genai)
+# Support de l'IA Gemini (google-genai)
 try:
     from google import genai
     from google.genai import types
@@ -38,10 +39,10 @@ try:
         ai_client = None
 except ImportError:
     ai_client = None
-    logger.warning("Bibliothèque google-genai non installée. L'IA utilisera un mode fallback local.")
+    logger.warning("Bibliothèque google-genai non disponible. Mode IA local activé.")
 
 # ------------------------------------------------------------------------------
-# TRADUCTIONS & SYSTÈME MULTILINGUE
+# TRADUCTIONS & MULTILINGUE
 # ------------------------------------------------------------------------------
 
 LANGUAGES = {
@@ -55,49 +56,46 @@ TRANSLATIONS = {
         "welcome_select_lang": "Veuillez sélectionner la langue principale du serveur :",
         "lang_set": "La langue du serveur a été configurée sur : **Français 🇫🇷**",
         "no_permission": "❌ Vous n'avez pas la permission requise (`{perm}`) pour exécuter cette action.",
-        "premium_required": "⭐ **Fonctionnalité Premium**\nCette option nécessite un abonnement Premium actif pour ce serveur (2,99 € / 3 mois).\nContactez l'administration de Zyren pour activer votre accès.",
+        "unlock_required": "🔒 **Pack Vérouillé**\nCette option nécessite d'activer le pack complet.\nUtilisez la commande `/redeem 0001` pour tout débloquer !",
         "dash_title": "🤖 ZYREN DASHBOARD",
         "dash_desc": "Bienvenue sur le panneau de contrôle interactif de **Zyren**.\nGérez l'ensemble des fonctionnalités du serveur ci-dessous.",
         "stats_title": "📊 Statistiques du Serveur",
         "ticket_created": "🎫 Votre ticket a été créé : {channel}",
-        "ticket_closed": "🔒 Le ticket a été fermé et archivé par {user}.",
+        "ticket_closed": "🔒 Le ticket a été fermé par {user}.",
         "mod_action_success": "✅ L'action `{action}` a été appliquée sur {target}. Raison : {reason}",
         "welcome_msg_default": "Bienvenue {member} sur le serveur **{guild}** !",
         "server_builder_start": "🏗️ **Lia Server Builder** commence l'analyse et la création du serveur...",
-        "server_builder_success": "✅ La structure du serveur a été générée avec succès par Lia !",
-        "global_announce_sent": "📢 Annonce globale diffusée sur {count} serveurs."
+        "server_builder_success": "✅ La structure du serveur a été générée avec succès par Lia !"
     },
     "en": {
         "welcome_select_lang": "Please select the primary language for this server:",
         "lang_set": "Server language has been set to: **English 🇬🇧**",
-        "no_permission": "❌ You do not have the required permission (`{perm}`) to execute this action.",
-        "premium_required": "⭐ **Premium Feature**\nThis option requires an active Premium subscription for this server (€2.99 / 3 months).\nContact Zyren administration to activate access.",
+        "no_permission": "❌ You do not have the required permission (`{perm}`).",
+        "unlock_required": "🔒 **Locked Pack**\nThis feature requires unlocking the full pack.\nUse `/redeem 0001` to unlock everything!",
         "dash_title": "🤖 ZYREN DASHBOARD",
-        "dash_desc": "Welcome to the interactive control panel of **Zyren**.\nManage all server settings using the buttons below.",
+        "dash_desc": "Welcome to the interactive control panel of **Zyren**.",
         "stats_title": "📊 Server Statistics",
         "ticket_created": "🎫 Your ticket has been created: {channel}",
-        "ticket_closed": "🔒 Ticket closed and archived by {user}.",
-        "mod_action_success": "✅ Action `{action}` applied to {target}. Reason: {reason}",
+        "ticket_closed": "🔒 Ticket closed by {user}.",
+        "mod_action_success": "✅ Action `{action}` applied to {target}.",
         "welcome_msg_default": "Welcome {member} to **{guild}**!",
-        "server_builder_start": "🏗️ **Lia Server Builder** is processing your request and building structure...",
-        "server_builder_success": "✅ Server structure successfully generated by Lia!",
-        "global_announce_sent": "📢 Global announcement broadcasted to {count} servers."
+        "server_builder_start": "🏗️ **Lia Server Builder** is building structure...",
+        "server_builder_success": "✅ Server structure successfully generated by Lia!"
     },
     "ar": {
         "welcome_select_lang": "يرجى اختيار اللغة الرئيسية للسيرفر:",
         "lang_set": "تم ضبط لغة السيرفر إلى: **العربية 🇸🇦**",
-        "no_permission": "❌ لا تملك الصلاحيات المطلوبة (`{perm}`) لتنفيذ هذا الإجراء.",
-        "premium_required": "⭐ **ميزة بريميوم**\nهذه الميزة تتطلب اشتراك بريميوم نشط لهذا السيرفر (2.99 € / 3 أشهر).\nتواصل مع إدارة Zyren لتفعيل الاشتراك.",
+        "no_permission": "❌ لا تملك الصلاحيات المطلوبة (`{perm}`).",
+        "unlock_required": "🔒 **الحزمة مغلقة**\nتتطلب هذه الميزة تفعيل الحزمة الكاملة.\nاستخدم `/redeem 0001` لفتح كل شيء!",
         "dash_title": "🤖 لوحة تحكم ZYREN",
-        "dash_desc": "مرحبًا بك في لوحة التحكم التفاعلية لـ **Zyren**.\nقم بإدارة جميع إعدادات السيرفر أدناه.",
+        "dash_desc": "مرحبًا بك في لوحة التحكم التفاعلية لـ **Zyren**.",
         "stats_title": "📊 إحصائيات السيرفر",
         "ticket_created": "🎫 تم إنشاء تذكرتك: {channel}",
-        "ticket_closed": "🔒 تم إغلاق التذكرة وأرشفتها بواسطة {user}.",
-        "mod_action_success": "✅ تم تطبيق الإجراء `{action}` على {target}. السبب: {reason}",
+        "ticket_closed": "🔒 تم إغلاق التذكرة بواسطة {user}.",
+        "mod_action_success": "✅ تم تطبيق الإجراء `{action}` على {target}.",
         "welcome_msg_default": "أهلاً بك {member} في **{guild}**!",
-        "server_builder_start": "🏗️ **Lia Server Builder** يبدأ تحليل وإنشاء هيكلة السيرفر...",
-        "server_builder_success": "✅ تم إنشاء هيكل السيرفر بنجاح بواسطة Lia!",
-        "global_announce_sent": "📢 تم نشر الإعلان العالمي إلى {count} سيرفرات."
+        "server_builder_start": "🏗️ **Lia Server Builder** يبدأ إنشاء هيكلة السيرفر...",
+        "server_builder_success": "✅ تم إنشاء هيكل السيرفر بنجاح بواسطة Lia!"
     }
 }
 
@@ -107,7 +105,7 @@ def get_text(lang: str, key: str, **kwargs) -> str:
     return text.format(**kwargs)
 
 # ------------------------------------------------------------------------------
-# GESTIONNAIRE DE BASE DE DONNÉES (SQLite3)
+# BASE DE DONNÉES (SQLite3)
 # ------------------------------------------------------------------------------
 
 class Database:
@@ -121,44 +119,19 @@ class Database:
     def init_db(self):
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            
-            # Table des configurations serveurs
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS guild_config (
                 guild_id INTEGER PRIMARY KEY,
                 language TEXT DEFAULT 'fr',
                 ia_enabled INTEGER DEFAULT 1,
+                unlocked INTEGER DEFAULT 0,
                 welcome_channel_id INTEGER DEFAULT 0,
                 welcome_message TEXT DEFAULT '',
                 auto_role_id INTEGER DEFAULT 0,
                 ticket_category_id INTEGER DEFAULT 0,
                 ticket_support_role_id INTEGER DEFAULT 0,
                 announce_channel_id INTEGER DEFAULT 0,
-                mod_logs_channel_id INTEGER DEFAULT 0,
-                global_announces_enabled INTEGER DEFAULT 1
-            )
-            """)
-            
-            # Table des abonnements Premium
-            cursor.execute("""
-            CREATE TABLE IF NOT EXISTS premium_subscriptions (
-                guild_id INTEGER PRIMARY KEY,
-                status TEXT DEFAULT 'disabled', -- 'active', 'expired', 'pending', 'disabled'
-                activated_at TEXT,
-                expires_at TEXT,
-                activated_by INTEGER
-            )
-            """)
-            
-            # Table d'avertissements de modération (Warns)
-            cursor.execute("""
-            CREATE TABLE IF NOT EXISTS warns (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id INTEGER,
-                user_id INTEGER,
-                moderator_id INTEGER,
-                reason TEXT,
-                timestamp TEXT
+                mod_logs_channel_id INTEGER DEFAULT 0
             )
             """)
             conn.commit()
@@ -177,14 +150,14 @@ class Database:
                 "guild_id": row[0],
                 "language": row[1],
                 "ia_enabled": bool(row[2]),
-                "welcome_channel_id": row[3],
-                "welcome_message": row[4],
-                "auto_role_id": row[5],
-                "ticket_category_id": row[6],
-                "ticket_support_role_id": row[7],
-                "announce_channel_id": row[8],
-                "mod_logs_channel_id": row[9],
-                "global_announces_enabled": bool(row[10])
+                "unlocked": bool(row[3]),
+                "welcome_channel_id": row[4],
+                "welcome_message": row[5],
+                "auto_role_id": row[6],
+                "ticket_category_id": row[7],
+                "ticket_support_role_id": row[8],
+                "announce_channel_id": row[9],
+                "mod_logs_channel_id": row[10]
             }
 
     def update_guild_config(self, guild_id: int, key: str, value: Any):
@@ -193,74 +166,27 @@ class Database:
             cursor.execute(f"UPDATE guild_config SET {key} = ? WHERE guild_id = ?", (value, guild_id))
             conn.commit()
 
-    def get_premium_status(self, guild_id: int) -> Dict[str, Any]:
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT status, activated_at, expires_at, activated_by FROM premium_subscriptions WHERE guild_id = ?", (guild_id,))
-            row = cursor.fetchone()
-            if not row:
-                return {"status": "disabled", "activated_at": None, "expires_at": None, "activated_by": None, "is_valid": False}
-            
-            status, activated_at, expires_at, activated_by = row
-            is_valid = False
-            if status == "active" and expires_at:
-                exp_date = datetime.datetime.fromisoformat(expires_at)
-                if datetime.datetime.now(datetime.timezone.utc) < exp_date:
-                    is_valid = True
-                else:
-                    status = "expired"
-                    cursor.execute("UPDATE premium_subscriptions SET status = 'expired' WHERE guild_id = ?", (guild_id,))
-                    conn.commit()
-
-            return {
-                "status": status,
-                "activated_at": activated_at,
-                "expires_at": expires_at,
-                "activated_by": activated_by,
-                "is_valid": is_valid
-            }
-
-    def set_premium(self, guild_id: int, status: str, days: int = 90, activated_by: int = 0):
-        now = datetime.datetime.now(datetime.timezone.utc)
-        expires = now + datetime.timedelta(days=days) if status == "active" else now
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-            INSERT INTO premium_subscriptions (guild_id, status, activated_at, expires_at, activated_by)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(guild_id) DO UPDATE SET
-                status = excluded.status,
-                activated_at = excluded.activated_at,
-                expires_at = excluded.expires_at,
-                activated_by = excluded.activated_by
-            """, (guild_id, status, now.isoformat(), expires.isoformat(), activated_by))
-            conn.commit()
-
-    def add_warn(self, guild_id: int, user_id: int, moderator_id: int, reason: str):
-        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("INSERT INTO warns (guild_id, user_id, moderator_id, reason, timestamp) VALUES (?, ?, ?, ?, ?)",
-                           (guild_id, user_id, moderator_id, reason, now))
-            conn.commit()
+    def is_unlocked(self, guild_id: int, user_id: Optional[int] = None) -> bool:
+        # Le Créateur a toujours accès à tout gratuitement
+        if user_id and user_id in OWNER_IDS:
+            return True
+        config = self.get_guild_config(guild_id)
+        return config["unlocked"]
 
 db = Database()
 
 # ------------------------------------------------------------------------------
-# IA INTEGRATED CORE: LIA
+# CORE IA: LIA ENGINE
 # ------------------------------------------------------------------------------
 
 class LiaEngine:
-    """Moteur IA principal intégré à Zyren."""
-    
     @staticmethod
     async def generate_response(prompt: str, system_instruction: str = "") -> str:
         if not ai_client:
-            return "[Lia Engine]: L'API Gemini n'est pas configurée ou indisponible."
-        
+            return "[Lia Engine]: API Gemini non disponible."
         try:
             config = types.GenerateContentConfig(
-                system_instruction=system_instruction or "Tu es Lia, l'intelligence artificielle intégrée au bot Discord Zyren. Tu es moderne, professionnelle, concise et courtoise."
+                system_instruction=system_instruction or "Tu es Lia, l'intelligence artificielle intégrée au bot Discord Zyren."
             )
             response = ai_client.models.generate_content(
                 model='gemini-2.5-flash',
@@ -269,67 +195,32 @@ class LiaEngine:
             )
             return response.text
         except Exception as e:
-            logger.error(f"Erreur lors de la génération IA avec Lia : {e}")
-            return "Une erreur est survenue lors du traitement par Lia."
+            logger.error(f"Erreur Lia Engine : {e}")
+            return "Une erreur est survenue lors de la génération avec Lia."
 
     @staticmethod
     async def parse_server_structure(description: str) -> Dict[str, Any]:
-        """Analyse le besoin d'un utilisateur et retourne une structure JSON pour la création de serveur."""
         system_prompt = (
             "Tu es Lia, l'expert en architecture Discord de Zyren. "
-            "Analyse le texte de l'utilisateur et génère un objet JSON décrivant les rôles et catégories/salons à créer.\n"
-            "Format attendu STRICTEMENT en JSON :\n"
-            "{\n"
-            '  "roles": ["Role1", "Role2"],\n'
-            '  "categories": [\n'
-            '     {"name": "Nom Categorie", "channels": [{"name": "nom-salon", "type": "text"}, {"name": "Vocal", "type": "voice"}]}\n'
-            "  ]\n"
-            "}"
+            "Analyse le texte et génère STRICTEMENT un objet JSON valide :\n"
+            '{"roles": ["Role1", "Role2"], "categories": [{"name": "Cat1", "channels": [{"name": "ch-1", "type": "text"}]}]}'
         )
         if not ai_client:
-            # Fallback local par défaut si Gemini n'est pas configuré
             return {
-                "roles": ["Membre", "Staff", "VIP"],
-                "categories": [
-                    {
-                        "name": "📌 INFORMATIONS",
-                        "channels": [{"name": "welcome", "type": "text"}, {"name": "rules", "type": "text"}]
-                    },
-                    {
-                        "name": "💬 COMMUNAUTÉ",
-                        "channels": [{"name": "général", "type": "text"}, {"name": "vocal-1", "type": "voice"}]
-                    }
-                ]
+                "roles": ["Membre", "Staff"],
+                "categories": [{"name": "📌 ACCUEIL", "channels": [{"name": "bienvenue", "type": "text"}]}]
             }
 
         res = await LiaEngine.generate_response(description, system_instruction=system_prompt)
         try:
-            # Extraction du bloc JSON de la réponse
             start = res.find("{")
             end = res.rfind("}") + 1
-            json_str = res[start:end]
-            return json.loads(json_str)
-        except Exception as e:
-            logger.error(f"Erreur de parsing JSON par Lia : {e}")
-            return {
-                "roles": ["Membre", "Modérateur"],
-                "categories": [
-                    {
-                        "name": "ACCUEIL",
-                        "channels": [{"name": "general", "type": "text"}]
-                    }
-                ]
-            }
-
-    @staticmethod
-    async def translate_announcement(text: str, target_lang: str) -> str:
-        if target_lang == "fr":
-            return text
-        prompt = f"Traduis le message suivant en {'Anglais' if target_lang=='en' else 'Arabe'} en conservant un ton professionnel et les formats/emojis Discord :\n\n{text}"
-        return await LiaEngine.generate_response(prompt)
+            return json.loads(res[start:end])
+        except Exception:
+            return {"roles": ["Membre"], "categories": [{"name": "GÉNÉRAL", "channels": [{"name": "discussion", "type": "text"}]}]}
 
 # ------------------------------------------------------------------------------
-# COMPOSANTS UI DISCORD (VIEWS, SELECTS, MODALS)
+# INTERFACES UTILISATEUR DISCORD (UI)
 # ------------------------------------------------------------------------------
 
 class LanguageSelectView(discord.ui.View):
@@ -338,7 +229,7 @@ class LanguageSelectView(discord.ui.View):
         self.guild_id = guild_id
 
     @discord.ui.select(
-        placeholder="Choisissez la langue / Choose language...",
+        placeholder="Choisissez la langue...",
         options=[
             discord.SelectOption(label="Français", value="fr", emoji="🇫🇷"),
             discord.SelectOption(label="English", value="en", emoji="🇬🇧"),
@@ -346,68 +237,44 @@ class LanguageSelectView(discord.ui.View):
         ]
     )
     async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
-        chosen_lang = select.values[0]
-        db.update_guild_config(self.guild_id, "language", chosen_lang)
-        text = get_text(chosen_lang, "lang_set")
-        await interaction.response.send_message(text, ephemeral=True)
+        db.update_guild_config(self.guild_id, "language", select.values[0])
+        await interaction.response.send_message(get_text(select.values[0], "lang_set"), ephemeral=True)
 
-class TicketActionView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="Fermer le Ticket", style=discord.ButtonStyle.danger, emoji="🔒", custom_id="zyren_close_ticket")
-    async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        guild_id = interaction.guild_id
-        config = db.get_guild_config(guild_id)
-        lang = config["language"]
-        
-        await interaction.response.send_message(get_text(lang, "ticket_closed", user=interaction.user.mention))
-        await interaction.channel.edit(locked=True)
-        await interaction.channel.set_permissions(interaction.guild.default_role, send_messages=False)
-
-class ServerBuilderModal(discord.ui.Modal, title="🏗️ Lia Server Builder (Premium)"):
+class ServerBuilderModal(discord.ui.Modal, title="🏗️ Lia Server Builder"):
     prompt_input = discord.ui.TextInput(
         label="Description de votre serveur",
         style=discord.TextStyle.paragraph,
-        placeholder="Ex: Je veux un serveur Gaming RP avec section recrutement, staff, zone membre et salons vocaux...",
+        placeholder="Ex: Serveur Gaming avec zone Staff et salons vocaux...",
         required=True,
         max_length=1000
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        guild = interaction.guild
-        prem = db.get_premium_status(guild.id)
-        config = db.get_guild_config(guild.id)
+        unlocked = db.is_unlocked(interaction.guild_id, interaction.user.id)
+        config = db.get_guild_config(interaction.guild_id)
         lang = config["language"]
 
-        if not prem["is_valid"]:
-            await interaction.response.send_message(get_text(lang, "premium_required"), ephemeral=True)
+        if not unlocked:
+            await interaction.response.send_message(get_text(lang, "unlock_required"), ephemeral=True)
             return
 
         await interaction.response.send_message(get_text(lang, "server_builder_start"), ephemeral=True)
-        
-        # Génération de la structure par Lia
         structure = await LiaEngine.parse_server_structure(self.prompt_input.value)
 
-        # Création progressive sans tout écraser
         try:
-            for role_name in structure.get("roles", []):
-                await guild.create_role(name=role_name, reason="Lia Server Builder")
-            
-            for cat_data in structure.get("categories", []):
-                category = await guild.create_category(cat_data["name"])
-                for ch_data in cat_data.get("channels", []):
-                    if ch_data.get("type") == "voice":
-                        await category.create_voice_channel(ch_data["name"])
+            for r_name in structure.get("roles", []):
+                await interaction.guild.create_role(name=r_name, reason="Lia Builder")
+            for cat in structure.get("categories", []):
+                category = await interaction.guild.create_category(cat["name"])
+                for ch in cat.get("channels", []):
+                    if ch.get("type") == "voice":
+                        await category.create_voice_channel(ch["name"])
                     else:
-                        await category.create_text_channel(ch_data["name"])
-            
+                        await category.create_text_channel(ch["name"])
             await interaction.followup.send(get_text(lang, "server_builder_success"), ephemeral=True)
-        except discord.Forbidden:
-            await interaction.followup.send("❌ Autorisaton insuffisante. Assurez-vous que Zyren a la permission `Gérer les canaux` et `Gérer les rôles`.", ephemeral=True)
         except Exception as e:
-            logger.error(f"Erreur création serveur : {e}")
-            await interaction.followup.send("❌ Une erreur s'est produite durant la création.", ephemeral=True)
+            logger.error(f"Erreur création : {e}")
+            await interaction.followup.send("❌ Permissions insuffisantes pour créer les rôles/salons.", ephemeral=True)
 
 class DashboardView(discord.ui.View):
     def __init__(self, user: discord.User, guild: discord.Guild):
@@ -416,98 +283,36 @@ class DashboardView(discord.ui.View):
         self.guild = guild
         self.config = db.get_guild_config(guild.id)
         self.lang = self.config["language"]
-        self.premium = db.get_premium_status(guild.id)
-
-    def is_admin(self, interaction: discord.Interaction) -> bool:
-        return interaction.user.guild_permissions.administrator or interaction.user.id == self.guild.owner_id
+        self.unlocked = db.is_unlocked(guild.id, user.id)
 
     @discord.ui.button(label="Statistiques", style=discord.ButtonStyle.secondary, emoji="📊", row=0)
     async def stats_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        total_members = self.guild.member_count
-        bot_members = sum(1 for m in self.guild.members if m.bot)
-        human_members = total_members - bot_members
-        
-        active_pct = min(100, int((human_members / max(1, total_members)) * 100))
-        config_pct = 75 if self.config["welcome_channel_id"] else 45
-        
-        embed = discord.Embed(
-            title=get_text(self.lang, "stats_title"),
-            color=discord.Color.blue()
-        )
-        embed.add_field(name="Membres Totaux", value=f"{total_members} (Humains: {human_members}, Bots: {bot_members})", inline=False)
-        embed.add_field(name="Taux d'humains", value=f"`{active_pct}%`", inline=True)
-        embed.add_field(name="Niveau de Config", value=f"`{config_pct}%`", inline=True)
-        embed.add_field(name="Statut Premium", value=f"`{'ACTIF ⭐' if self.premium['is_valid'] else 'INACTIF'}`", inline=True)
-        
+        embed = discord.Embed(title=get_text(self.lang, "stats_title"), color=discord.Color.blue())
+        embed.add_field(name="Membres", value=str(self.guild.member_count), inline=True)
+        embed.add_field(name="Statut Pack", value="🔓 **DÉBLOQUÉ**" if self.unlocked else "🔒 **VERROUILLÉ**", inline=True)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.ui.button(label="Lia IA", style=discord.ButtonStyle.primary, emoji="🧠", row=0)
     async def lia_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not self.premium["is_valid"]:
-            await interaction.response.send_message(get_text(self.lang, "premium_required"), ephemeral=True)
+        if not self.unlocked:
+            await interaction.response.send_message(get_text(self.lang, "unlock_required"), ephemeral=True)
             return
-
-        state = "Activée" if self.config["ia_enabled"] else "Désactivée"
-        embed = discord.Embed(
-            title="🧠 Configuration de Lia IA",
-            description=f"Statut actuel de l'IA sur ce serveur : **{state}**\nLia gère les fonctions d'assistance contextuelle et d'analyse.",
-            color=discord.Color.purple()
-        )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-    @discord.ui.button(label="Tickets", style=discord.ButtonStyle.secondary, emoji="🎫", row=0)
-    async def ticket_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not self.is_admin(interaction):
-            await interaction.response.send_message(get_text(self.lang, "no_permission", perm="Administrator"), ephemeral=True)
-            return
-            
-        embed = discord.Embed(
-            title="🎫 Support & Tickets",
-            description="Cliquez sur le bouton ci-dessous pour ouvrir un ticket de support.",
-            color=discord.Color.green()
-        )
-        view = discord.ui.View(timeout=None)
-        
-        async def create_ticket_callback(inter: discord.Interaction):
-            overwrites = {
-                inter.guild.default_role: discord.PermissionOverwrite(read_messages=False),
-                inter.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-                inter.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
-            }
-            ch = await inter.guild.create_text_channel(name=f"ticket-{inter.user.name}", overwrites=overwrites)
-            await ch.send(content=f"Bonjour {inter.user.mention}, un membre de l'équipe va vous répondre.", view=TicketActionView())
-            await inter.response.send_message(get_text(self.lang, "ticket_created", channel=ch.mention), ephemeral=True)
-
-        btn = discord.ui.Button(label="Ouvrir un ticket", style=discord.ButtonStyle.primary, emoji="📩")
-        btn.callback = create_ticket_callback
-        view.add_item(btn)
-
-        await interaction.channel.send(embed=embed, view=view)
-        await interaction.response.send_message("✅ Panneau de tickets déployé dans ce salon.", ephemeral=True)
+        await interaction.response.send_message("🧠 **Lia IA** est débloquée et prête à être utilisée !", ephemeral=True)
 
     @discord.ui.button(label="Créer Serveur", style=discord.ButtonStyle.success, emoji="🏗️", row=1)
-    async def build_server_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not self.is_admin(interaction):
-            await interaction.response.send_message(get_text(self.lang, "no_permission", perm="Administrator"), ephemeral=True)
+    async def build_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self.unlocked:
+            await interaction.response.send_message(get_text(self.lang, "unlock_required"), ephemeral=True)
             return
-            
-        if not self.premium["is_valid"]:
-            await interaction.response.send_message(get_text(self.lang, "premium_required"), ephemeral=True)
-            return
-
         await interaction.response.send_modal(ServerBuilderModal())
 
     @discord.ui.button(label="Langue", style=discord.ButtonStyle.secondary, emoji="🌍", row=1)
     async def lang_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not self.is_admin(interaction):
-            await interaction.response.send_message(get_text(self.lang, "no_permission", perm="Administrator"), ephemeral=True)
-            return
-
         view = LanguageSelectView(self.guild.id)
         await interaction.response.send_message(get_text(self.lang, "welcome_select_lang"), view=view, ephemeral=True)
 
 # ------------------------------------------------------------------------------
-# CORE BOT CLASS: ZYREN
+# BOT MAIN CLASS
 # ------------------------------------------------------------------------------
 
 class ZyrenBot(commands.Bot):
@@ -516,253 +321,80 @@ class ZyrenBot(commands.Bot):
         intents.message_content = True
         intents.guilds = True
         intents.members = True
-
         super().__init__(command_prefix="!", intents=intents)
 
     async def setup_hook(self):
-        self.add_view(TicketActionView()) # Persistance des vues interactives
         await self.tree.sync()
-        logger.info("Commandes Slash synchronisées avec succès.")
 
     async def on_ready(self):
         logger.info(f"⚡ Zyren connecté sous {self.user} (ID: {self.user.id})")
-        logger.info(f"🧠 Lia IA Status: {'Prêt (Gemini Direct API)' if ai_client else 'Mode Fallback Local'}")
+        logger.info(f"👑 Créateur(s) reconnu(s) : {OWNER_IDS}")
         await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="/dashboard | Zyren & Lia"))
-
-    async def on_guild_join(self, guild: discord.Guild):
-        """Déclenché lors de l'ajout du bot sur un nouveau serveur."""
-        db.get_guild_config(guild.id) # Initialise la config
-        
-        # Envoi d'un message d'accueil dans le 1er salon textuel accessible
-        target_channel = guild.system_channel
-        if not target_channel:
-            for channel in guild.text_channels:
-                if channel.permissions_for(guild.me).send_messages:
-                    target_channel = channel
-                    break
-
-        if target_channel:
-            embed = discord.Embed(
-                title="⚡ Bienvenue à Zyren & Lia !",
-                description="Merci d'avoir ajouté Zyren. Pour démarrer, veuillez sélectionner la langue du serveur ci-dessous.",
-                color=discord.Color.gold()
-            )
-            view = LanguageSelectView(guild.id)
-            await target_channel.send(embed=embed, view=view)
-
-    async def on_member_join(self, member: discord.Member):
-        """Gestion du système de Bienvenue et Auto-Role."""
-        config = db.get_guild_config(member.guild.id)
-        
-        # Attribution Auto-Rôle
-        if config["auto_role_id"] > 0:
-            role = member.guild.get_role(config["auto_role_id"])
-            if role:
-                try:
-                    await member.add_roles(role, reason="Zyren Auto-Role")
-                except discord.Forbidden:
-                    logger.warning(f"Impossible d'attribuer le rôle auto sur {member.guild.name}")
-
-        # Envoi Message de bienvenue
-        if config["welcome_channel_id"] > 0:
-            channel = member.guild.get_channel(config["welcome_channel_id"])
-            if channel:
-                msg_template = config["welcome_message"] or get_text(config["language"], "welcome_msg_default", member=member.mention, guild=member.guild.name)
-                formatted_msg = msg_template.replace("{member}", member.mention).replace("{guild}", member.guild.name)
-                
-                embed = discord.Embed(
-                    title="👋 Nouveau membre !",
-                    description=formatted_msg,
-                    color=discord.Color.blue()
-                )
-                embed.set_thumbnail(url=member.display_avatar.url)
-                await channel.send(embed=embed)
 
 bot = ZyrenBot()
 
 # ------------------------------------------------------------------------------
-# COMMANDES SLASH UNIVERSELLES & MODÉRATION
+# COMMANDES SLASH
 # ------------------------------------------------------------------------------
 
-@bot.tree.command(name="dashboard", description="Ouvre le panneau de configuration interactif de Zyren.")
+@bot.tree.command(name="dashboard", description="Panneau de configuration interactif Zyren.")
 async def dashboard_cmd(interaction: discord.Interaction):
     config = db.get_guild_config(interaction.guild_id)
-    lang = config["language"]
-    premium = db.get_premium_status(interaction.guild_id)
+    unlocked = db.is_unlocked(interaction.guild_id, interaction.user.id)
     
+    is_owner = interaction.user.id in OWNER_IDS
+    title = get_text(config["language"], "dash_title")
+    if is_owner:
+        title += " 👑 [MODE CRÉATEUR - ACCÈS TOTAL]"
+
     embed = discord.Embed(
-        title=get_text(lang, "dash_title"),
-        description=get_text(lang, "dash_desc"),
-        color=discord.Color.gold() if premium["is_valid"] else discord.Color.dark_gray()
+        title=title,
+        description=get_text(config["language"], "dash_desc"),
+        color=discord.Color.green() if unlocked else discord.Color.dark_gray()
     )
-    embed.add_field(name="Statut Serveur", value="⭐ **PREMIUM**" if premium["is_valid"] else "🔹 Standard", inline=True)
-    embed.add_field(name="Langue", value=LANGUAGES.get(lang, "Français 🇫🇷"), inline=True)
-    embed.add_field(name="Système IA (Lia)", value="✅ Actif" if config["ia_enabled"] and premium["is_valid"] else "🔒 Déverrouillage Premium Requis", inline=False)
-    
+    embed.add_field(name="Statut Pack", value="🟢 **DÉBLOQUÉ (Créateur)**" if is_owner else ("🟢 **DÉBLOQUÉ**" if unlocked else "🔴 **VERROUILLÉ**"), inline=True)
+    embed.add_field(name="Langue", value=LANGUAGES.get(config["language"], "Français 🇫🇷"), inline=True)
+
     view = DashboardView(interaction.user, interaction.guild)
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
-@bot.tree.command(name="create-server", description="Génère automatiquement une structure de serveur complète grâce à Lia (Premium).")
-async def create_server_cmd(interaction: discord.Interaction):
-    if not interaction.user.guild_permissions.administrator and interaction.user.id != interaction.guild.owner_id:
-        await interaction.response.send_message("❌ Réservé aux administrateurs.", ephemeral=True)
-        return
-
-    prem = db.get_premium_status(interaction.guild_id)
-    config = db.get_guild_config(interaction.guild_id)
-    if not prem["is_valid"]:
-        await interaction.response.send_message(get_text(config["language"], "premium_required"), ephemeral=True)
-        return
-
-    await interaction.response.send_modal(ServerBuilderModal())
-
-@bot.tree.command(name="premium", description="Vérifie le statut d'abonnement Premium de ce serveur.")
-async def premium_cmd(interaction: discord.Interaction):
-    prem = db.get_premium_status(interaction.guild_id)
-    
-    embed = discord.Embed(title="⭐ Abonnements Zyren Premium", color=discord.Color.gold())
-    if prem["is_valid"]:
-        exp_date = datetime.datetime.fromisoformat(prem["expires_at"]).strftime("%d/%m/%Y à %H:%M")
-        embed.description = f"Ce serveur bénéficie de **Zyren Premium**.\n🗓️ **Date d'expiration :** {exp_date}"
-    else:
-        embed.description = (
-            "Ce serveur est actuellement en version **Gratuite**.\n\n"
-            "**Avantages Premium (2,99 € / 3 mois) :**\n"
-            "• Accès complet à l'IA Lia\n"
-            "• Création intelligente de serveur via `/create-server`\n"
-            "• Statistiques avancées & Automatisations poussées\n\n"
-            "Pour souscrire, contactez le propriétaire de Zyren."
+@bot.tree.command(name="redeem", description="Entrer le code de déverrouillage pour débloquer Lia et toutes les fonctionnalités.")
+@app_commands.describe(code="Entrez le code à chiffres (Ex: 0001)")
+async def redeem_cmd(interaction: discord.Interaction, code: str):
+    if code.strip() == ACTIVATION_CODE:
+        db.update_guild_config(interaction.guild_id, "unlocked", 1)
+        embed = discord.Embed(
+            title="🎉 Code Correct !",
+            description="Le code **0001** a été validé avec succès !\n\nToutes les fonctionnalités du bot (**Lia IA**, **Création de Serveur**, etc.) sont désormais **débloquées sur ce serveur** !",
+            color=discord.Color.green()
         )
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    else:
+        await interaction.response.send_message("❌ Code incorrect ! Veuillez entrer le bon code pour débloquer le pack.", ephemeral=True)
 
-# ------------------- COMMANDES DE MODÉRATION -------------------
+# ---------------- COMMANDES PROPRIÉTAIRE (OWNER ONLY) ----------------
 
-@bot.tree.command(name="ban", description="Bannit un membre du serveur.")
-@app_commands.checks.has_permissions(ban_members=True)
-async def ban_cmd(interaction: discord.Interaction, member: discord.Member, reason: Optional[str] = "Aucune raison fournie"):
-    if member.top_role >= interaction.user.top_role:
-        await interaction.response.send_message("❌ Vous ne pouvez pas modérer ce membre (rôle supérieur ou égal).", ephemeral=True)
-        return
-    
-    await member.ban(reason=reason)
-    config = db.get_guild_config(interaction.guild_id)
-    await interaction.response.send_message(get_text(config["language"], "mod_action_success", action="BAN", target=member.mention, reason=reason))
-
-@bot.tree.command(name="kick", description="Expulse un membre du serveur.")
-@app_commands.checks.has_permissions(kick_members=True)
-async def kick_cmd(interaction: discord.Interaction, member: discord.Member, reason: Optional[str] = "Aucune raison fournie"):
-    if member.top_role >= interaction.user.top_role:
-        await interaction.response.send_message("❌ Vous ne pouvez pas modérer ce membre.", ephemeral=True)
-        return
-
-    await member.kick(reason=reason)
-    config = db.get_guild_config(interaction.guild_id)
-    await interaction.response.send_message(get_text(config["language"], "mod_action_success", action="KICK", target=member.mention, reason=reason))
-
-@bot.tree.command(name="warn", description="Donne un avertissement à un membre.")
-@app_commands.checks.has_permissions(manage_messages=True)
-async def warn_cmd(interaction: discord.Interaction, member: discord.Member, reason: str):
-    db.add_warn(interaction.guild_id, member.id, interaction.user.id, reason)
-    config = db.get_guild_config(interaction.guild_id)
-    await interaction.response.send_message(get_text(config["language"], "mod_action_success", action="WARN", target=member.mention, reason=reason))
-
-@bot.tree.command(name="clear", description="Supprime un nombre spécifié de messages.")
-@app_commands.checks.has_permissions(manage_messages=True)
-async def clear_cmd(interaction: discord.Interaction, amount: int):
-    if amount < 1 or amount > 100:
-        await interaction.response.send_message("❌ Précisez un nombre entre 1 et 100.", ephemeral=True)
-        return
-
-    deleted = await interaction.channel.purge(limit=amount)
-    await interaction.response.send_message(f"🧹 `{len(deleted)}` messages supprimés.", ephemeral=True)
-
-# ------------------------------------------------------------------------------
-# PANNEAU PROPRIÉTAIRE ZYREN (OWNER DASHBOARD & SYSTEM)
-# ------------------------------------------------------------------------------
-
-@bot.tree.command(name="owner-dashboard", description="[OWNER ONLY] Panneau d'administration global de Zyren.")
+@bot.tree.command(name="owner-dashboard", description="[OWNER ONLY] Panneau d'administration global.")
 async def owner_dashboard_cmd(interaction: discord.Interaction):
     if interaction.user.id not in OWNER_IDS:
-        await interaction.response.send_message("⛔ Accès refusé. Cette commande est strictement réservée au créateur de Zyren.", ephemeral=True)
+        await interaction.response.send_message("⛔ Accès refusé. Réservé au Créateur du bot.", ephemeral=True)
         return
-
-    guilds = bot.guilds
-    total_guilds = len(guilds)
-    total_users = sum(g.member_count for g in guilds)
 
     embed = discord.Embed(
         title="👑 ZYREN OWNER DASHBOARD",
-        description=f"**Statistiques Globales :**\n• Serveurs : `{total_guilds}`\n• Utilisateurs servis : `{total_users}`",
+        description=f"**Serveurs connectés :** `{len(bot.guilds)}`",
         color=discord.Color.red()
     )
+    for g in bot.guilds[:10]:
+        embed.add_field(name=g.name, value=f"ID: `{g.id}` | Membres: {g.member_count}", inline=False)
 
-    guild_list_str = ""
-    for g in guilds[:10]: # Affiche les 10 premiers serveurs
-        p = db.get_premium_status(g.id)
-        p_str = "⭐" if p["is_valid"] else "🔹"
-        guild_list_str += f"• **{g.name}** (`{g.id}`) - {g.member_count} mbrs [{p_str}]\n"
-
-    embed.add_field(name="Aperçu des Serveurs (10 max)", value=guild_list_str or "Aucun", inline=False)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="set-premium", description="[OWNER ONLY] Active ou désactive le statut Premium d'un serveur.")
-@app_commands.describe(guild_id="ID du serveur", status="active/disabled", days="Durée en jours (défaut: 90)")
-async def set_premium_cmd(interaction: discord.Interaction, guild_id: str, status: str, days: Optional[int] = 90):
-    if interaction.user.id not in OWNER_IDS:
-        await interaction.response.send_message("⛔ Accès refusé.", ephemeral=True)
-        return
-
-    try:
-        gid = int(guild_id)
-        if status not in ["active", "disabled"]:
-            await interaction.response.send_message("❌ Le statut doit être `active` ou `disabled`.", ephemeral=True)
-            return
-
-        db.set_premium(gid, status, days=days, activated_by=interaction.user.id)
-        await interaction.response.send_message(f"✅ Le statut Premium du serveur `{gid}` a été mis à jour sur `{status}` pour {days} jours.", ephemeral=True)
-    except ValueError:
-        await interaction.response.send_message("❌ ID de serveur invalide.", ephemeral=True)
-
-@bot.tree.command(name="broadcast-announcement", description="[OWNER ONLY] Diffuse une annonce globale traduite par Lia sur tous les serveurs.")
-async def broadcast_cmd(interaction: discord.Interaction, announcement: str):
-    if interaction.user.id not in OWNER_IDS:
-        await interaction.response.send_message("⛔ Accès refusé.", ephemeral=True)
-        return
-
-    await interaction.response.defer(ephemeral=True)
-
-    sent_count = 0
-    for guild in bot.guilds:
-        config = db.get_guild_config(guild.id)
-        if not config["global_announces_enabled"] or config["announce_channel_id"] == 0:
-            continue
-
-        channel = guild.get_channel(config["announce_channel_id"])
-        if channel and channel.permissions_for(guild.me).send_messages:
-            try:
-                # Lia adapte le message dans la langue du serveur
-                translated_text = await LiaEngine.translate_announcement(announcement, config["language"])
-                
-                embed = discord.Embed(
-                    title="📢 Zyren Official Announcement",
-                    description=translated_text,
-                    color=discord.Color.gold()
-                )
-                embed.set_footer(text="Message officiel de l'équipe Zyren")
-                await channel.send(embed=embed)
-                sent_count += 1
-            except Exception as e:
-                logger.error(f"Erreur d'envoi d'annonce globale sur {guild.id}: {e}")
-
-    await interaction.followup.send(get_text("fr", "global_announce_sent", count=sent_count), ephemeral=True)
-
-# ------------------------------------------------------------------------------
-# EXECUTION
-# ------------------------------------------------------------------------------
+# ---------------- EXECUTION ----------------
 
 if __name__ == "__main__":
     if not DISCORD_TOKEN:
-        logger.critical("❌ Erreur : DISCORD_TOKEN non fourni dans le fichier .env !")
+        logger.critical("❌ Aucun DISCORD_TOKEN trouvé dans le fichier .env !")
         sys.exit(1)
         
     bot.run(DISCORD_TOKEN)
